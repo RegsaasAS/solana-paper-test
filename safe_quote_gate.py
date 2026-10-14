@@ -29,7 +29,8 @@ def read_public(url, payload=None):
     if parsed.port not in (None,443) or parsed.fragment:
         raise ValueError('Unexpected endpoint port or fragment')
     paths={'api.geckoterminal.com':{'/api/v2/networks/solana/trending_pools'}, 'transaction-v1.raydium.io':{'/compute/swap-base-in'}, 'api.mainnet-beta.solana.com':{'','/'}}
-    if parsed.path not in paths[parsed.hostname]:
+    candle_read=parsed.hostname=='api.geckoterminal.com' and re.fullmatch(r'/api/v2/networks/solana/pools/[1-9A-HJ-NP-Za-km-z]{32,44}/ohlcv/minute',parsed.path)
+    if parsed.path not in paths[parsed.hostname] and not candle_read:
         raise ValueError('Endpoint is not an approved read path')
     if payload is not None and (parsed.hostname != 'api.mainnet-beta.solana.com' or payload.get('method') != 'getAccountInfo'):
         raise ValueError('Only read-only mint lookup may use POST')
