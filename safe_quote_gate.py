@@ -9,7 +9,10 @@ import urllib.request
 
 SOL = 'So11111111111111111111111111111111111111112'
 TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 AMOUNT_LAMPORTS = 50_000_000
+MAX_IMMEDIATE_QUOTED_LOSS = 0.02
+MAX_IMMEDIATE_QUOTED_LOSS_BPS = 200
 ALLOWED_HOSTS = {'api.geckoterminal.com', 'transaction-v1.raydium.io', 'api.mainnet-beta.solana.com'}
 MINT = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
@@ -49,7 +52,8 @@ def confirmed_standard_mint(mint):
     if not value:
         raise ValueError('Mint account missing from public RPC response')
     print('PUBLIC_MINT_OBSERVATION '+json.dumps({'mint':mint,'owner':value.get('owner'),'parsed':value.get('data',{}).get('parsed')}),flush=True)
-    if value.get('owner') != TOKEN_PROGRAM:
+    owner=value.get('owner')
+    if owner not in (TOKEN_PROGRAM,TOKEN_2022_PROGRAM):
         raise ValueError('Unsupported token program: '+str(value.get('owner')))
     parsed = value.get('data',{}).get('parsed',{})
     info = parsed.get('info',{})
@@ -59,7 +63,21 @@ def confirmed_standard_mint(mint):
         raise ValueError('Mint or freeze authority remains enabled')
     if int(info['supply'])<=0 or not isinstance(info['decimals'],int):
         raise ValueError('Invalid mint supply/decimals')
-    return dict(decimals=info['decimals'],slot=r['result']['context']['slot'],mint_authority_revoked=True,freeze_authority_revoked=True,token_program=TOKEN_PROGRAM)
+    extension_names=[]
+    if owner==TOKEN_2022_PROGRAM:
+        extensions=info.get('extensions')
+        if not isinstance(extensions,list):
+            raise ValueError('Token-2022 extension inventory missing')
+        for extension in extensions:
+            name=extension.get('extension');state=extension.get('state')
+            if name not in ('metadataPointer','tokenMetadata') or not isinstance(state,dict) or name in extension_names:
+                raise ValueError('Unsupported, duplicated or unparsed Token-2022 extension: '+str(name))
+            if name=='metadataPointer' and ('authority' not in state or state['authority'] is not None or state.get('metadataAddress')!=mint):
+                raise ValueError('Metadata pointer not confirmed immutable and self-referencing')
+            if name=='tokenMetadata' and ('updateAuthority' not in state or state['updateAuthority'] is not None or state.get('mint')!=mint):
+                raise ValueError('Token metadata not confirmed immutable and matching')
+            extension_names.append(name)
+    return dict(decimals=info['decimals'],slot=r['result']['context']['slot'],mint_authority_revoked=True,freeze_authority_revoked=True,token_program=owner,permitted_extensions=extension_names)
 
 
 def quote(input_mint, output_mint, amount):
@@ -77,6 +95,11 @@ def quote(input_mint, output_mint, amount):
     if not 0<floor<=out or not q.get('routePlan'):
         raise ValueError('Missing positive output, minimum or route')
     return dict(received_utc=dt.datetime.now(dt.timezone.utc).isoformat(),latency_seconds=round(time.monotonic()-began,3),quote=q)
+
+
+def cost_allowed(sell_floor):
+    # Integer comparison makes a quote exactly at the 2% ceiling deterministic.
+    return int(sell_floor)*10000 >= AMOUNT_LAMPORTS*(10000-MAX_IMMEDIATE_QUOTED_LOSS_BPS)
 
 
 def main():
@@ -113,13 +136,22 @@ def main():
                 row['sell_quote']=quote(c['mint'],SOL,int(row['buy_quote']['quote']['otherAmountThreshold']))
             except Exception as exc:
                 row['quote_error']=str(exc)
-            row['passed']='mint_checks' in row and 'buy_quote' in row and 'sell_quote' in row
+            row['data_gate_passed']='mint_checks' in row and 'buy_quote' in row and 'sell_quote' in row
+            if 'buy_quote' in row and 'sell_quote' in row:
+                sell_floor=int(row['sell_quote']['quote']['otherAmountThreshold'])
+                row['immediate_quoted_minimum_return_fraction']=sell_floor/AMOUNT_LAMPORTS-1
+                row['cost_gate_passed']=cost_allowed(sell_floor)
+                if not row['cost_gate_passed']:
+                    row['cost_rejection']='Quoted immediate liquidation loss exceeds 2% practical cost ceiling before unmodeled network/setup costs'
+            row['passed']=row['data_gate_passed'] and row.get('cost_gate_passed',False)
             tested.append(row)
             print('QUOTE_GATE_CANDIDATE '+json.dumps(row),flush=True)
     except Exception as exc:
         errors.append(dict(stage='discovery',error=str(exc)))
     passed=[t for t in tested if t['passed']]
-    result=dict(purpose='read_only_size_specific_quote_and_mint_gate_not_execution_or_profit',status='quote_gate_passed' if passed else 'blocked_no_qualified_quotes',cohort=cohort,tested=tested,errors=errors,passed_count=len(passed),two_way_quote_count=sum('buy_quote' in t and 'sell_quote' in t for t in tested),confirmed_mint_count=sum('mint_checks' in t for t in tested),reference_quote_amount_sol='0.05',elapsed_seconds=round(time.monotonic()-started,3),paper_trades=0,real_trades=0,accounts_created=0,credentials_used=False,limitations=['Trending-pool cohort is a data-feasibility sample, not an unbiased profitability sample.','Pool age is not verified token launch age.','Authority checks do not establish token or liquidity safety.','Only standard SPL tokens; Token-2022 excluded.','Quotes are read-only estimates, not actual fills; sell quote does not incorporate a hypothetical buy changing pool state.','Network, priority and account creation costs are not evaluated at this gate.'])
+    data_passed=sum(t['data_gate_passed'] for t in tested)
+    status='quote_gate_passed' if passed else ('blocked_by_quoted_costs' if data_passed else 'blocked_no_qualified_quotes')
+    result=dict(purpose='read_only_size_specific_quote_and_mint_gate_not_execution_or_profit',status=status,cohort=cohort,tested=tested,errors=errors,passed_count=len(passed),data_gate_pass_count=data_passed,maximum_immediate_quoted_loss_fraction=MAX_IMMEDIATE_QUOTED_LOSS,two_way_quote_count=sum('buy_quote' in t and 'sell_quote' in t for t in tested),confirmed_mint_count=sum('mint_checks' in t for t in tested),reference_quote_amount_sol='0.05',elapsed_seconds=round(time.monotonic()-started,3),paper_trades=0,real_trades=0,accounts_created=0,credentials_used=False,limitations=['Trending-pool cohort is a data-feasibility sample, not an unbiased profitability sample.','Pool age is not verified token launch age.','Authority checks do not establish token or liquidity safety.','Token-2022 accepted only with explicit inventory containing at most immutable self-referencing metadata extensions.','Quotes are read-only estimates, not actual fills; sell quote does not incorporate a hypothetical buy changing pool state.','Network, priority and account creation costs are not evaluated at this gate.','The 2% cost ceiling is a practical test guard, not a demonstrated investment edge.'])
     pathlib.Path('safe-gate-result.json').write_text(json.dumps(result,indent=2))
     print('SAFE_GATE_JSON '+json.dumps(result),flush=True)
 
