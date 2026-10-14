@@ -1,0 +1,23 @@
+name: Final public liquidity cost screen
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'liquidity_cost_screen.py'
+      - '.github/workflows/liquidity-cost-screen.yml'
+permissions:
+  contents: read
+jobs:
+  liquidity-cost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Enforce free-runner scope
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read size-specific quotes for a fixed liquid token cohort
+        run: python3 liquidity_cost_screen.py
