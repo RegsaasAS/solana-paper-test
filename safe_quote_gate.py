@@ -48,6 +48,7 @@ def confirmed_standard_mint(mint):
     value = r.get('result',{}).get('value')
     if not value:
         raise ValueError('Mint account missing from public RPC response')
+    print('PUBLIC_MINT_OBSERVATION '+json.dumps({'mint':mint,'owner':value.get('owner'),'parsed':value.get('data',{}).get('parsed')}),flush=True)
     if value.get('owner') != TOKEN_PROGRAM:
         raise ValueError('Unsupported token program: '+str(value.get('owner')))
     parsed = value.get('data',{}).get('parsed',{})
