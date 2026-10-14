@@ -51,7 +51,7 @@ def run(args):
         "provider_fee_verified": False, "ordermin_sol": metadata["ordermin"],
         "costmin_usdt": metadata["costmin"], "position": None, "trades": [],
         "quote_count": 0, "errors": [], "time_exit_seconds": args.hold,
-        "limitations": ["snapshot book simulation; no actual orders", "timed entries and exits test functionality only", "no queue, network execution or failed-order model", "no verified unattended hosting"],
+        "limitations": ["snapshot book simulation; no actual orders", "timed entries and exits test functionality only", "no queue, network execution or failed-order model", "no permanent unattended hosting verified"],
     }
     cash = D("100")
     position = None
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("--seconds", type=int, default=180)
     parser.add_argument("--hold", type=int, default=45)
     parser.add_argument("--poll", type=int, default=10)
-    parser.add_argument("--fee", default="0.004")
+    parser.add_argument("--fee", default="0.008")
     parser.add_argument("--slippage", default="0.001")
     parser.add_argument("--output", default="paper-result")
     arguments = parser.parse_args()
