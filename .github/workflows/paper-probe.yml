@@ -1,10 +1,11 @@
-name: Bounded SOL paper integration test
+name: One-hour SOL signal paper test
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'probe.py'
+      - 'signal_test.py'
+      - 'test_signal.py'
       - '.github/workflows/paper-probe.yml'
 permissions:
   contents: read
@@ -14,7 +15,7 @@ concurrency:
 jobs:
   paper-probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 65
     steps:
       - name: Enforce free-runner scope
         env:
@@ -22,19 +23,23 @@ jobs:
         run: |
           test "$IS_PRIVATE" = "false" || { echo 'This test is prepared for a public repository only.'; exit 1; }
       - uses: actions/checkout@v4
-      - name: Test public market data and simulated accounting
-        run: python3 probe.py --seconds 600 --hold 60 --poll 10 --output paper-result
+        with:
+          persist-credentials: false
+      - name: Verify signal timing, risk controls and accounting
+        run: python3 -m unittest test_signal.py -v
+      - name: Screen one fixed signal on live market data
+        run: python3 signal_test.py --seconds 3600 --output signal-result
       - name: Retain result in logs and job summary
         if: always()
         run: |
           python3 - <<'PY'
           import json, os, pathlib
-          p = pathlib.Path('paper-result/result.json')
+          p = pathlib.Path('signal-result/result.json')
           if not p.exists():
               raise SystemExit('No result was recorded; test did not complete')
           value = json.loads(p.read_text())
           print(json.dumps(value, indent=2))
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('# Technical paper test, not a strategy result\n\n')
+              summary.write('# One-hour forward signal screen, not verified performance\n\n')
               summary.write('```json\n' + json.dumps(value, indent=2) + '\n```\n')
           PY
