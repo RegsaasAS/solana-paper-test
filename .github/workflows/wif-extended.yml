@@ -1,0 +1,40 @@
+name: Bounded four hour WIF paper test
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wif_extended.py'
+      - '.github/workflows/wif-extended.yml'
+permissions:
+  contents: read
+concurrency:
+  group: wif-extended-paper
+  cancel-in-progress: false
+jobs:
+  wif-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 245
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify unchanged signal and accounting boundaries
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py -v
+      - name: Observe unchanged WIF hypothesis for up to four hours
+        run: python3 -u wif_extended.py
+      - name: Retain result in logs and job summary
+        if: always()
+        run: |
+          if test -f dip-paper-result.json; then
+            cat dip-paper-result.json
+            echo '### Bounded WIF paper result' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat dip-paper-result.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No result file: paper test not verified.'
+          fi
