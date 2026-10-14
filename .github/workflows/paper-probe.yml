@@ -1,0 +1,40 @@
+name: Bounded SOL paper integration test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'probe.py'
+      - '.github/workflows/paper-probe.yml'
+permissions:
+  contents: read
+concurrency:
+  group: sol-paper-probe
+  cancel-in-progress: false
+jobs:
+  paper-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Enforce free-runner scope
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          test "$IS_PRIVATE" = "false" || { echo 'This test is prepared for a public repository only.'; exit 1; }
+      - uses: actions/checkout@v4
+      - name: Test public market data and simulated accounting
+        run: python3 probe.py --seconds 600 --hold 60 --poll 10 --output paper-result
+      - name: Retain result in logs and job summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path('paper-result/result.json')
+          if not p.exists():
+              raise SystemExit('No result was recorded; test did not complete')
+          value = json.loads(p.read_text())
+          print(json.dumps(value, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('# Technical paper test, not a strategy result\n\n')
+              summary.write('```json\n' + json.dumps(value, indent=2) + '\n```\n')
+          PY
