@@ -43,9 +43,13 @@ def confirmed_standard_mint(mint):
     if not MINT.fullmatch(mint):
         raise ValueError('Invalid mint identifier')
     r = read_public('https://api.mainnet-beta.solana.com', {'jsonrpc':'2.0','id':1,'method':'getAccountInfo','params':[mint,{'encoding':'jsonParsed','commitment':'confirmed'}]})
+    if r.get('error'):
+        raise ValueError('Public RPC error: '+json.dumps(r['error']))
     value = r.get('result',{}).get('value')
-    if not value or value.get('owner') != TOKEN_PROGRAM:
-        raise ValueError('Missing mint or unsupported token program')
+    if not value:
+        raise ValueError('Mint account missing from public RPC response')
+    if value.get('owner') != TOKEN_PROGRAM:
+        raise ValueError('Unsupported token program: '+str(value.get('owner')))
     parsed = value.get('data',{}).get('parsed',{})
     info = parsed.get('info',{})
     if parsed.get('type')!='mint' or not {'mintAuthority','freezeAuthority','decimals','supply'} <= info.keys():
@@ -98,18 +102,23 @@ def main():
             row=dict(candidate=c,passed=False)
             try:
                 row['mint_checks']=confirmed_standard_mint(c['mint'])
+            except Exception as exc:
+                row['mint_error']=str(exc)
+            # Reading a public quote has no trading side effects. A missing mint
+            # check still prevents passage even if both quotes are available.
+            try:
                 row['buy_quote']=quote(SOL,c['mint'],AMOUNT_LAMPORTS)
                 time.sleep(1)
                 row['sell_quote']=quote(c['mint'],SOL,int(row['buy_quote']['quote']['otherAmountThreshold']))
-                row['passed']=True
             except Exception as exc:
-                row['error']=str(exc)
+                row['quote_error']=str(exc)
+            row['passed']='mint_checks' in row and 'buy_quote' in row and 'sell_quote' in row
             tested.append(row)
             print('QUOTE_GATE_CANDIDATE '+json.dumps(row),flush=True)
     except Exception as exc:
         errors.append(dict(stage='discovery',error=str(exc)))
     passed=[t for t in tested if t['passed']]
-    result=dict(purpose='read_only_size_specific_quote_and_mint_gate_not_execution_or_profit',status='quote_gate_passed' if passed else 'blocked_no_qualified_quotes',cohort=cohort,tested=tested,errors=errors,passed_count=len(passed),reference_quote_amount_sol='0.05',elapsed_seconds=round(time.monotonic()-started,3),paper_trades=0,real_trades=0,accounts_created=0,credentials_used=False,limitations=['Trending-pool cohort is a data-feasibility sample, not an unbiased profitability sample.','Pool age is not verified token launch age.','Authority checks do not establish token or liquidity safety.','Only standard SPL tokens; Token-2022 excluded.','Quotes are read-only estimates, not actual fills; sell quote does not incorporate a hypothetical buy changing pool state.','Network, priority and account creation costs are not evaluated at this gate.'])
+    result=dict(purpose='read_only_size_specific_quote_and_mint_gate_not_execution_or_profit',status='quote_gate_passed' if passed else 'blocked_no_qualified_quotes',cohort=cohort,tested=tested,errors=errors,passed_count=len(passed),two_way_quote_count=sum('buy_quote' in t and 'sell_quote' in t for t in tested),confirmed_mint_count=sum('mint_checks' in t for t in tested),reference_quote_amount_sol='0.05',elapsed_seconds=round(time.monotonic()-started,3),paper_trades=0,real_trades=0,accounts_created=0,credentials_used=False,limitations=['Trending-pool cohort is a data-feasibility sample, not an unbiased profitability sample.','Pool age is not verified token launch age.','Authority checks do not establish token or liquidity safety.','Only standard SPL tokens; Token-2022 excluded.','Quotes are read-only estimates, not actual fills; sell quote does not incorporate a hypothetical buy changing pool state.','Network, priority and account creation costs are not evaluated at this gate.'])
     pathlib.Path('safe-gate-result.json').write_text(json.dumps(result,indent=2))
     print('SAFE_GATE_JSON '+json.dumps(result),flush=True)
 
