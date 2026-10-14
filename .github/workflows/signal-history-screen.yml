@@ -1,0 +1,23 @@
+name: Quick diagnostic of fixed SOL rules
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'history_screen.py'
+      - '.github/workflows/signal-history-screen.yml'
+permissions:
+  contents: read
+jobs:
+  history-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce free-runner scope
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Diagnose fixed rules on recent closed one-minute bars
+        run: python3 history_screen.py
