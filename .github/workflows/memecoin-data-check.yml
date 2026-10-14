@@ -1,0 +1,23 @@
+name: Bounded public memecoin data check
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'memecoin_data_check.py'
+      - '.github/workflows/memecoin-data-check.yml'
+permissions:
+  contents: read
+jobs:
+  data-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Enforce free-runner scope
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Observe a fixed token cohort without orders or accounts
+        run: python3 memecoin_data_check.py
