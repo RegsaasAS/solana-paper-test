@@ -1,0 +1,26 @@
+name: Safe public quote gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'safe_quote_gate.py'
+      - 'test_safe_quote_gate.py'
+      - '.github/workflows/safe-paper-test.yml'
+permissions:
+  contents: read
+jobs:
+  safe-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Enforce free-runner scope
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify public-endpoint and missing-data guards
+        run: python3 -m unittest test_safe_quote_gate.py -v
+      - name: Check public buy and sell quotes before paper trading
+        run: python3 safe_quote_gate.py
