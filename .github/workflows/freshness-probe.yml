@@ -1,0 +1,26 @@
+name: Bounded public candle freshness heartbeat
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'freshness_probe.py'
+      - 'test_freshness_probe.py'
+      - '.github/workflows/freshness-probe.yml'
+permissions:
+  contents: read
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify repeated stale polls remain visible
+        run: python3 -m unittest test_freshness_probe.py -v
+      - name: Compare three public closed-bar snapshots without trading
+        run: python3 -u freshness_probe.py
