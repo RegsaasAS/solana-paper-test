@@ -20,3 +20,7 @@ Before this run: two reversal trades lost. The existing 31-minute price log is d
 ## Decision rule
 
 Stop at the fixed time/trade/data/risk limit. No automatic extension or retuning. A few gains or losses do not establish an edge. Assess actual sample size, complete data coverage, net after modeled costs and all closed/open positions before deciding on further work. No progression to real trading is authorized.
+
+## Observation startup clarification before the live observation run
+
+The initial attempt (run 38763704991) stopped before observation because its preflight cost exceeded 2%; no strategy return was produced. The next run allows public read-only collection when the cost guard is temporarily exceeded. Both advancing chain-context checks still must pass. Every actual paper entry still enforces the unchanged 2% cost ceiling through StreamLedger.enter. Entry thresholds, output bounds, position size and exits are unchanged. This startup change uses no performance observations from the blocked attempt.

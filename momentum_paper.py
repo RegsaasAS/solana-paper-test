@@ -45,9 +45,9 @@ def preflight():
     for i in range(2):
         q=source.quote(dip.gate.SOL,C['mint'],50000000);s=q['snapshot'];validate_snapshot(s,previous);previous=int(s['slot'])
         checks.append(dict(observed_utc=s['observed_utc'],slot=s['slot'],pool=s['pool'],mint=s['mint'],stressed_loss_fraction=str(1-D(int(s['sell']['minQuote'])-50000)/D(50050000)),cost_passed=immediate_cost_passes(s)))
-        if not checks[-1]['cost_passed']:raise ValueError('Unchanged cost ceiling exceeded')
+        print('MOMENTUM_PREFLIGHT_OBSERVATION '+json.dumps(checks[-1]),flush=True)
         if i==0:time.sleep(10)
-    print('MOMENTUM_PREFLIGHT_JSON '+json.dumps(dict(status='passed',checks=checks,real_trades=0,paper_trades=0)),flush=True)
+    print('MOMENTUM_PREFLIGHT_JSON '+json.dumps(dict(status='read_only_price_collection_ready',initial_cost_passed=all(c['cost_passed'] for c in checks),entry_cost_guard_unchanged=True,checks=checks,real_trades=0,paper_trades=0)),flush=True)
 
 
 def main():
@@ -72,6 +72,9 @@ def main():
                 now=time.monotonic();wall=time.time();stamp=int(wall)//60*60;price=D(50000000)/D(s['buy']['base'])
                 observation=dict(observed_utc=s['observed_utc'],slot=s['slot'],indicative_lamports_per_token_atom=str(price),holding=holding)
                 observation['quote_observation']=dict(received_utc=q['received_utc'],quote=q['quote'],reported_fee_bps=s['reported_fee_bps'],base_reserve_atoms=s['base_reserve_atoms'],raw_quote_reserve_atoms=s['raw_quote_reserve_lamports'],virtual_quote_reserve_atoms=s['signed_virtual_quote_reserves'])
+                if not holding:
+                    observation['immediate_cost_guard_passed']=immediate_cost_passes(s)
+                    observation['immediate_modeled_loss_fraction']=str(1-D(int(s['sell']['minQuote'])-50000)/D(50050000))
                 if holding:
                     observation['liquidation_after_network_lamports']=book.mark(q)
                     observation['modeled_trade_net_pnl_lamports']=book.mark(q)-book.position['spent_lamports']
