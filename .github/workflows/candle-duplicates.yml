@@ -1,0 +1,26 @@
+name: Inspect duplicate minute observations
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'candle_duplicates.py'
+      - 'test_candle_duplicates.py'
+      - '.github/workflows/candle-duplicates.yml'
+permissions:
+  contents: read
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify repeated stale polls remain visible
+        run: python3 -m unittest test_candle_duplicates.py -v
+      - name: Inspect two current duplicate snapshots without trading
+        run: python3 -u candle_duplicates.py
