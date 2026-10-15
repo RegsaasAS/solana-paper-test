@@ -1,0 +1,23 @@
+name: Read only WIF minute gap diagnosis
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'candle_gap_check.py'
+      - '.github/workflows/candle-gap-check.yml'
+permissions:
+  contents: read
+jobs:
+  candle-gap-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare historical and current minute data without any trading
+        run: python3 -u candle_gap_check.py
