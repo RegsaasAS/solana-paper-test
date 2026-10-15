@@ -1,0 +1,25 @@
+name: Verify corrected candle and real activity gates
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'candle_readiness_check.py'
+      - '.github/workflows/candle-readiness.yml'
+permissions:
+  contents: read
+jobs:
+  candle-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify data, signal and accounting guards
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py -v
+      - name: Check corrected production data handling without trading
+        run: python3 -u candle_readiness_check.py
