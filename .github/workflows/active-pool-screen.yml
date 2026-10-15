@@ -1,0 +1,25 @@
+name: Bounded active Solana pool screen
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'active_pool_screen.py'
+      - '.github/workflows/active-pool-screen.yml'
+permissions:
+  contents: read
+jobs:
+  active-pool-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify existing safety and data guards
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py -v
+      - name: Find one candidate with activity and conservative quoted costs
+        run: python3 -u active_pool_screen.py
