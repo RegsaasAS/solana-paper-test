@@ -1,0 +1,57 @@
+name: Fixed forward momentum paper experiment
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'momentum_paper.py'
+      - 'test_momentum_paper.py'
+      - 'momentum-experiment.md'
+      - '.github/workflows/momentum-paper.yml'
+permissions:
+  contents: read
+concurrency:
+  group: bounded-momentum-paper
+  cancel-in-progress: false
+jobs:
+  stream-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install exact official versions with lifecycle scripts disabled
+        run: |
+          mkdir quote-check
+          cp stream-quote-package.json quote-check/package.json
+          cp cohort_pool_price.cjs quote-check/
+          cd quote-check
+          npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify exact SDK integrity
+        working-directory: quote-check
+        run: |
+          node -e 'const a=require("node:assert/strict");const l=require("./package-lock.json");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].version,"2.1.0");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].integrity,"sha512-O0ulb5In/pMzxpcWIkzU17N27HQNZhGGof4fhgXZUkRj/vDbrZsDrViNoouhR52bvtfRf61e/bSvEg/h+35ueA==")'
+      - name: Verify signal, risk and separate rent accounting
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py test_fresh_paper.py test_chain_price_paper.py test_momentum_paper.py test_candle_runtime_guard.py -v
+      - name: Prepare official offline public price reader
+        run: ln -s quote-check/node_modules node_modules
+      - name: Verify two advancing chain price snapshots and unchanged cost ceiling
+        run: python3 -u momentum_paper.py --preflight
+      - name: Observe own forward sampled price hypothesis for up to 90 minutes
+        run: python3 -u momentum_paper.py
+      - name: Retain result in logs and job summary
+        if: always()
+        run: |
+          if test -f momentum-paper-result.json; then
+            cat momentum-paper-result.json
+            echo '### Forward momentum paper result' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat momentum-paper-result.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No result file: paper test not verified.'
+          fi
