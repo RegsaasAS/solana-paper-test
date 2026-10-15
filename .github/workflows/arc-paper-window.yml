@@ -1,0 +1,40 @@
+name: Bounded 30 minute arc paper test
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'arc_paper_window.py'
+      - '.github/workflows/arc-paper-window.yml'
+permissions:
+  contents: read
+concurrency:
+  group: bounded-arc-paper
+  cancel-in-progress: false
+jobs:
+  arc-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 33
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify safety, data and accounting boundaries
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py -v
+      - name: Observe frozen arc hypothesis for up to 30 minutes
+        run: python3 -u arc_paper_window.py
+      - name: Retain result in logs and job summary
+        if: always()
+        run: |
+          if test -f dip-paper-result.json; then
+            cat dip-paper-result.json
+            echo '### Bounded arc paper result' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat dip-paper-result.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No result file: paper test not verified.'
+          fi
