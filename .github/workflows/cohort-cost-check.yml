@@ -1,0 +1,38 @@
+name: Frozen cohort public pool cost check
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cohort_pool_price.cjs'
+      - 'cohort_cost_check.py'
+      - 'cost-pool-cohort.json'
+      - '.github/workflows/cohort-cost-check.yml'
+permissions:
+  contents: read
+jobs:
+  cohort-cost-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install exact official versions with lifecycle scripts disabled
+        run: |
+          mkdir quote-check
+          cp stream-quote-package.json quote-check/package.json
+          cp cohort_pool_price.cjs quote-check/
+          cd quote-check
+          npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify audited SDK integrity and calculate public prices only
+        working-directory: quote-check
+        run: |
+          node -e 'const a=require("node:assert/strict");const l=require("./package-lock.json");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].version,"2.1.0");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].integrity,"sha512-O0ulb5In/pMzxpcWIkzU17N27HQNZhGGof4fhgXZUkRj/vDbrZsDrViNoouhR52bvtfRf61e/bSvEg/h+35ueA==")'
+      - name: Compute frozen cohort public prices and filter without trading
+        run: |
+          ln -s quote-check/node_modules node_modules
+          python3 -u cohort_cost_check.py

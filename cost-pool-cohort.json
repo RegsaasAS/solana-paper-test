@@ -1,0 +1,72 @@
+[
+  {
+    "name": "Apple / SOL",
+    "mint": "BanYKy4tkDYang9w6Tg82WzPwvqDKS3KQPWD3bezpump",
+    "pool": "b8ZqktXw7ETbuHL1mqDLsMy3XEzzbBh5esWhxpozEZg",
+    "pool_created_at": "2026-10-15T09:27:06Z",
+    "observed_pool_age_minutes": 57.23,
+    "liquidity_usd": "103111.7057",
+    "reported_15m_volume_usd": "17939.4632325406",
+    "reported_15m_buys": 2812,
+    "reported_15m_sells": 2814,
+    "reported_market_cap_usd": null,
+    "reported_fdv_usd": "1532495.83937396",
+    "discovery_source": "trending_pools:3"
+  },
+  {
+    "name": "Nihilism / SOL",
+    "mint": "FRCVr13HAEfvzyzQUr31CVVidPJ7zj8swQYkTDDU6Ls",
+    "pool": "4NiSpF36BU3yNGzjaSktRe65Kgzpak3PKicofw3tgRBC",
+    "pool_created_at": "2026-10-15T09:25:17Z",
+    "observed_pool_age_minutes": 59.05,
+    "liquidity_usd": "161400.6572",
+    "reported_15m_volume_usd": "1870548.99581193",
+    "reported_15m_buys": 1592,
+    "reported_15m_sells": 1469,
+    "reported_market_cap_usd": null,
+    "reported_fdv_usd": "106833.127",
+    "discovery_source": "trending_pools:3"
+  },
+  {
+    "name": "RSGP / SOL",
+    "mint": "B99oR5xEF2CKJt2FheH5CkTF9A9oy25ysfa574siVw2x",
+    "pool": "2QLaX7capPH5A7zuxKVWqiynebARHdq84BPiKMf5Ecnq",
+    "pool_created_at": "2026-10-15T05:05:45Z",
+    "observed_pool_age_minutes": 318.71,
+    "liquidity_usd": "397768.7394",
+    "reported_15m_volume_usd": "1311399.4767119",
+    "reported_15m_buys": 677,
+    "reported_15m_sells": 619,
+    "reported_market_cap_usd": null,
+    "reported_fdv_usd": "1584447.891",
+    "discovery_source": "trending_pools:4"
+  },
+  {
+    "name": "PULT / SOL",
+    "mint": "AGNddB3rjPHELTdAyiCouqhZiGXfWda4CJbAvQGihERf",
+    "pool": "2rpNBXob38sX7yuK5aQGt8u9vNjPxNVes4qmmPX7mwFf",
+    "pool_created_at": "2026-10-15T02:34:35Z",
+    "observed_pool_age_minutes": 469.88,
+    "liquidity_usd": "337657.0556",
+    "reported_15m_volume_usd": "1319538.4312959",
+    "reported_15m_buys": 680,
+    "reported_15m_sells": 612,
+    "reported_market_cap_usd": null,
+    "reported_fdv_usd": "1625812.9049581",
+    "discovery_source": "trending_pools:4"
+  },
+  {
+    "name": "ALLOX / SOL",
+    "mint": "7GKcZsxF3boVZpJxgj6nfPzzA8gZEpEixEunEgffBya",
+    "pool": "4MJ9A8Uy9xW3szjXd9jMdwNLEr4EpR8v1Aiep55PVPBg",
+    "pool_created_at": "2026-10-15T02:29:51Z",
+    "observed_pool_age_minutes": 474.35,
+    "liquidity_usd": "336485.0261",
+    "reported_15m_volume_usd": "1309922.24720715",
+    "reported_15m_buys": 672,
+    "reported_15m_sells": 620,
+    "reported_market_cap_usd": null,
+    "reported_fdv_usd": "1695860.369",
+    "discovery_source": "trending_pools:2"
+  }
+]
