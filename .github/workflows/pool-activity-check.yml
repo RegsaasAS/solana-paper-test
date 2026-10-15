@@ -1,0 +1,23 @@
+name: Read only WIF pool activity diagnosis
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pool_activity_check.py'
+      - '.github/workflows/pool-activity-check.yml'
+permissions:
+  contents: read
+jobs:
+  pool-activity-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read pool trades, candles and confirmed public chain transactions
+        run: python3 -u pool_activity_check.py
