@@ -1,0 +1,24 @@
+name: Resume two launch candidates after rate-limit backoff
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'launch_resume.py'
+      - 'launch-resume-cohort.json'
+      - '.github/workflows/launch-resume.yml'
+permissions:
+  contents: read
+jobs:
+  launch-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resume fixed original candidates with one backoff and lower request rate
+        run: python3 -u launch_resume.py
