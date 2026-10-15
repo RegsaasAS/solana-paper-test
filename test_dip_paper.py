@@ -20,6 +20,31 @@ class Signal(unittest.TestCase):
         with self.assertRaises(ValueError):d.inspect(r,1560)
     def test_no_dip(self):
         r=bars();r[2][2]=101;r[14][4]=99;self.assertFalse(d.inspect(r,1560)['eligible'])
+class Activity(unittest.TestCase):
+    def test_empty_minutes_are_not_counted_as_trades(self):
+        r=bars()
+        for i in (0,1,3,4,5,6,7,8):r[i]=[r[i][0],100,100,100,100,0]
+        result=d.inspect(r,1560)
+        self.assertEqual(result['real_minutes'],8)
+        self.assertEqual(result['empty_minutes'],8)
+        self.assertTrue(result['eligible'])
+        r[9]=[r[9][0],100,100,100,100,0]
+        self.assertEqual(d.inspect(r,1560)['reason'],'insufficient_real_activity')
+    def test_zero_volume_latest_minute_cannot_signal(self):
+        r=bars();r[-1]=[1500,98,98,98,98,0]
+        self.assertEqual(d.inspect(r,1560)['reason'],'empty_latest_closed_minute')
+    def test_empty_minute_cannot_invent_price_movement(self):
+        r=bars();r[5]=[900,100,105,100,105,0]
+        with self.assertRaises(ValueError):d.inspect(r,1560)
+    def test_filled_chart_still_rejects_stale_prices(self):
+        self.assertEqual(d.inspect(bars(),1800)['reason'],'stale_bar')
+    def test_same_production_fetch_requests_provider_empty_minutes(self):
+        from unittest.mock import patch
+        p={'meta':{'base':{'address':C['mint']},'quote':{'address':d.gate.SOL}},'data':{'attributes':{'ohlcv_list':bars()}}}
+        with patch.object(d.gate,'read_public',return_value=p) as reader:
+            self.assertEqual(d.fetch_candles(C),bars())
+            self.assertIn('include_empty_intervals=true',reader.call_args.args[0])
+
 class Accounting(unittest.TestCase):
     def test_full_cost_conservation(self):
         b=d.Ledger();buy,sell=quotes();self.assertTrue(b.enter(C,buy,sell,0));b.close(sell,'test')

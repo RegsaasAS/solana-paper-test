@@ -6,12 +6,21 @@ import time
 from decimal import Decimal as D
 import safe_quote_gate as gate
 
-RULES=dict(runtime_seconds=900,initial_virtual_sol='1',entry_amount_sol='0.05',dip_fraction='0.02',rebound_fraction='0.005',last_bar_rise_fraction='0.001',lookback_minutes=15,entry_delay_seconds=10,signal_expiry_seconds=60,net_take_profit_fraction='0.02',net_stop_loss_fraction='-0.03',maximum_hold_seconds=300,cooldown_seconds=60,maximum_roundtrips=2,session_loss_limit_sol='0.05',maximum_immediate_quote_loss_fraction='0.02',network_cost_assumed_lamports_per_side=50000,first_token_account_cost_assumed_lamports=3000000,candle_poll_seconds=45,quote_poll_seconds=10)
+RULES=dict(runtime_seconds=900,initial_virtual_sol='1',entry_amount_sol='0.05',dip_fraction='0.02',rebound_fraction='0.005',last_bar_rise_fraction='0.001',lookback_minutes=15,entry_delay_seconds=10,signal_expiry_seconds=60,net_take_profit_fraction='0.02',net_stop_loss_fraction='-0.03',maximum_hold_seconds=300,cooldown_seconds=60,maximum_roundtrips=2,session_loss_limit_sol='0.05',maximum_immediate_quote_loss_fraction='0.02',network_cost_assumed_lamports_per_side=50000,first_token_account_cost_assumed_lamports=3000000,candle_poll_seconds=45,quote_poll_seconds=10,minimum_real_minutes_per_16=8)
 COHORT=[{'name':'Fartcoin','mint':'9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump','pool':'Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw'},{'name':'WIF','mint':'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm','pool':'EP2ib6dYdEeqD8MfE2ezHCxX3kP3K2eLKkirfPm5eyMx'}]
 
 
 def utc():
     return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def fetch_candles(coin,before=None):
+    url='https://api.geckoterminal.com/api/v2/networks/solana/pools/'+coin['pool']+'/ohlcv/minute?aggregate=1&limit=30&currency=token&token=base&include_empty_intervals=true'
+    if before is not None:url+='&before_timestamp='+str(int(before)-1)
+    p=gate.read_public(url)
+    if p.get('meta',{}).get('base',{}).get('address')!=coin['mint'] or p.get('meta',{}).get('quote',{}).get('address')!=gate.SOL:
+        raise ValueError('Candle token identity mismatch')
+    return p['data']['attributes']['ohlcv_list']
 
 
 def inspect(rows,now):
@@ -25,6 +34,17 @@ def inspect(rows,now):
         return dict(eligible=False,reason='stale_bar',bar_time=stamp)
     if [int(r[0]) for r in bars]!=list(range(stamp-900,stamp+60,60)):
         return dict(eligible=False,reason='bar_gap',bar_time=stamp)
+    # Only provider-marked zero-volume carry-forward bars may represent inactivity.
+    for i,r in enumerate(bars):
+        if D(str(r[5]))==0:
+            if len({D(str(v)) for v in r[1:5]})!=1 or (i and D(str(r[4]))!=D(str(bars[i-1][4]))):
+                raise ValueError('Zero-volume bar is not an unchanged prior close')
+    real_minutes=sum(D(str(r[5]))>0 for r in bars)
+    activity=dict(real_minutes=real_minutes,empty_minutes=16-real_minutes,required_real_minutes=RULES['minimum_real_minutes_per_16'])
+    if real_minutes<RULES['minimum_real_minutes_per_16']:
+        return dict(eligible=False,reason='insufficient_real_activity',bar_time=stamp,closed_bars=bars,**activity)
+    if D(str(bars[-1][5]))==0:
+        return dict(eligible=False,reason='empty_latest_closed_minute',bar_time=stamp,closed_bars=bars,**activity)
     previous,current=bars[:-1],bars[-1]
     peak=max(D(str(r[2])) for r in previous)
     peak_at=next(i for i,r in enumerate(previous) if D(str(r[2]))==peak)
@@ -35,7 +55,7 @@ def inspect(rows,now):
         return dict(eligible=False,reason='invalid_bar',bar_time=stamp)
     drop=1-close/peak;rebound=close/bottom-1;rise=close/opening-1
     eligible=peak_at<bottom_at and drop>=D(RULES['dip_fraction']) and rebound>=D(RULES['rebound_fraction']) and rise>=D(RULES['last_bar_rise_fraction']) and volume>0
-    return dict(eligible=eligible,reason='closed_bar_dip_rebound' if eligible else 'conditions_not_met',bar_time=stamp,drop_fraction=str(drop),rebound_fraction=str(rebound),last_bar_rise_fraction=str(rise),closed_bars=bars)
+    return dict(eligible=eligible,reason='closed_bar_dip_rebound' if eligible else 'conditions_not_met',bar_time=stamp,drop_fraction=str(drop),rebound_fraction=str(rebound),last_bar_rise_fraction=str(rise),closed_bars=bars,**activity)
 
 
 class Ledger:
@@ -94,12 +114,16 @@ def main():
         q=gate.quote(a,b,n);quote_count+=1;return q
     def save():
         result=book.summary(status,last_quote)
-        result.update(purpose='predeclared_forward_dip_rebound_paper_screen_not_verified_performance',rules=RULES,cohort=COHORT,active_cohort=active,decisions=decisions,eligible_signals=sum(d.get('eligible',False) for d in decisions),quote_count=quote_count,errors=errors,elapsed_seconds=round(time.monotonic()-began,3),updated_utc=utc(),adequate_sample=False,real_trades=0,credentials_used=False,limitations=['Older liquid Solana tokens, not original newly launched coin selection.','Fixed new hypothesis, not a replicated or validated author strategy.','PnL is in SOL relative to holding SOL, not a dollar return.','Quotes and minimum outputs are modeled fills; no orders, signatures or guaranteed execution.','Quoted AMM fees are embedded; network and one-time account costs are assumptions, not actual measured charges.','Account setup modeled at 0.003 SOL per token, not refunded, included in full portfolio result.','Initial cost guard is per trade and excludes one-time account setup; portfolio accounting includes it.','Hypothetical buys do not change real pool state.','Last-valid quote equity can be stale after a data failure.','Stops are sampled decisions, not guaranteed loss limits.','Mint checks do not verify owner concentration, liquidity locks or general token safety.','Short bounded test cannot establish profitability or permanent operation.'])
+        result.update(purpose='predeclared_forward_dip_rebound_paper_screen_not_verified_performance',rules=RULES,cohort=COHORT,active_cohort=active,decisions=decisions,eligible_signals=sum(d.get('eligible',False) for d in decisions),quote_count=quote_count,errors=errors,elapsed_seconds=round(time.monotonic()-began,3),updated_utc=utc(),adequate_sample=False,real_trades=0,credentials_used=False,limitations=['Older liquid Solana tokens, not original newly launched coin selection.','Fixed new hypothesis, not a replicated or validated author strategy.','PnL is in SOL relative to holding SOL, not a dollar return.','Quotes and minimum outputs are modeled fills; no orders, signatures or guaranteed execution.','Quoted AMM fees are embedded; network and one-time account costs are assumptions, not actual measured charges.','Account setup modeled at 0.003 SOL per token, not refunded, included in full portfolio result.','Initial cost guard is per trade and excludes one-time account setup; portfolio accounting includes it.','Hypothetical buys do not change real pool state.','Last-valid quote equity can be stale after a data failure.','Stops are sampled decisions, not guaranteed loss limits.','Mint checks do not verify owner concentration, liquidity locks or general token safety.','Zero-volume minutes are provider carry-forward prices, never actual trades.','Activity filter requires eight positive-volume closed minutes out of sixteen; not proof of organic trading.','Short bounded test cannot establish profitability or permanent operation.'])
         pathlib.Path('dip-paper-result.json').write_text(json.dumps(result,indent=2))
         return result
     print('DIP_RULES '+json.dumps(RULES),flush=True)
     for coin in COHORT:
         try:
+            readiness=inspect(fetch_candles(coin),int(time.time()))
+            if readiness['reason'] not in ('conditions_not_met','closed_bar_dip_rebound'):
+                decisions.append(dict(mint=coin['mint'],eligible=False,reason='preflight_data_rejection',data_check=readiness))
+                continue
             gate.confirmed_standard_mint(coin['mint'])
             buy=quoted(gate.SOL,coin['mint'],gate.AMOUNT_LAMPORTS)
             sell=quoted(coin['mint'],gate.SOL,int(buy['quote']['otherAmountThreshold']))
@@ -135,10 +159,7 @@ def main():
                     consecutive=0
             elif now>=next_candles and now<deadline:
                 for coin in active:
-                    p=gate.read_public('https://api.geckoterminal.com/api/v2/networks/solana/pools/'+coin['pool']+'/ohlcv/minute?aggregate=1&limit=30&currency=token&token=base')
-                    if p.get('meta',{}).get('base',{}).get('address')!=coin['mint'] or p.get('meta',{}).get('quote',{}).get('address')!=gate.SOL:
-                        raise ValueError('Candle token identity mismatch')
-                    d=inspect(p['data']['attributes']['ohlcv_list'],int(time.time()));d['mint']=coin['mint'];d['observed_utc']=utc()
+                    d=inspect(fetch_candles(coin),int(time.time()));d['mint']=coin['mint'];d['observed_utc']=utc()
                     if d['bar_time'] is not None and seen.get(coin['mint'])!=d['bar_time']:
                         seen[coin['mint']]=d['bar_time'];decisions.append(d);print('DIP_SIGNAL '+json.dumps(d),flush=True)
                         if d['eligible'] and time.monotonic()>=cooldown and time.monotonic()+330<deadline:
