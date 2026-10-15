@@ -1,0 +1,37 @@
+name: Retry STREAM readiness after transient data timeout
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'stream_readiness_retry.py'
+      - '.github/workflows/stream-readiness-retry.yml'
+permissions:
+  contents: read
+jobs:
+  stream-readiness-retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install exact official versions with lifecycle scripts disabled
+        run: |
+          mkdir quote-check
+          cp stream-quote-package.json quote-check/package.json
+          cp screen_pool_prices.cjs quote-check/
+          cd quote-check
+          npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify audited SDK integrity and calculate public prices only
+        working-directory: quote-check
+        run: |
+          node -e 'const a=require("node:assert/strict");const l=require("./package-lock.json");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].version,"2.1.0");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].integrity,"sha512-O0ulb5In/pMzxpcWIkzU17N27HQNZhGGof4fhgXZUkRj/vDbrZsDrViNoouhR52bvtfRf61e/bSvEg/h+35ueA==")'
+      - name: Compute frozen cohort public prices and filter without trading
+        run: |
+          ln -s quote-check/node_modules node_modules
+          python3 -m unittest test_candle_duplicates.py test_freshness_probe.py -v
+          python3 -u stream_readiness_retry.py
