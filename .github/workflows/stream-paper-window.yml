@@ -1,0 +1,57 @@
+name: Bounded STREAM paper test
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'stream_paper_window.py'
+      - 'stream_paper_prices.cjs'
+      - 'test_stream_paper.py'
+      - '.github/workflows/stream-paper-window.yml'
+permissions:
+  contents: read
+concurrency:
+  group: bounded-stream-paper
+  cancel-in-progress: false
+jobs:
+  stream-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 34
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install exact official versions with lifecycle scripts disabled
+        run: |
+          mkdir quote-check
+          cp stream-quote-package.json quote-check/package.json
+          cp stream_paper_prices.cjs quote-check/
+          cd quote-check
+          npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify exact SDK integrity
+        working-directory: quote-check
+        run: |
+          node -e 'const a=require("node:assert/strict");const l=require("./package-lock.json");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].version,"2.1.0");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].integrity,"sha512-O0ulb5In/pMzxpcWIkzU17N27HQNZhGGof4fhgXZUkRj/vDbrZsDrViNoouhR52bvtfRf61e/bSvEg/h+35ueA==")'
+      - name: Verify signal, risk and separate rent accounting
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py test_stream_paper.py -v
+      - name: Read public STREAM signals and model trades only
+        run: |
+          cp stream_paper_prices.cjs quote-check/stream_paper_prices.cjs
+          cp quote-check/package-lock.json stream-paper-package-lock.json
+          ln -s quote-check/node_modules node_modules
+          python3 -u stream_paper_window.py
+      - name: Retain result in logs and job summary
+        if: always()
+        run: |
+          if test -f dip-paper-result.json; then
+            cat dip-paper-result.json
+            echo '### STREAM paper result' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat dip-paper-result.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No result file: paper test not verified.'
+          fi
