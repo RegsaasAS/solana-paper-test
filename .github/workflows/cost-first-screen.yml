@@ -1,0 +1,25 @@
+name: Bounded cost first fresh Solana screen
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cost_first_screen.py'
+      - '.github/workflows/cost-first-screen.yml'
+permissions:
+  contents: read
+jobs:
+  cost-first-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify existing data and quote safety boundaries
+        run: python3 -m unittest test_safe_quote_gate.py test_dip_paper.py -v
+      - name: Build one bounded launch-focused watchlist without trading
+        run: python3 -u cost_first_screen.py
