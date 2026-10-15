@@ -1,0 +1,23 @@
+name: Inspect STREAM public quote feasibility
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'stream_quote_inspect.py'
+      - '.github/workflows/stream-quote-inspect.yml'
+permissions:
+  contents: read
+jobs:
+  stream-quote-inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect owner and pinned package without installing or executing it
+        run: python3 -u stream_quote_inspect.py
