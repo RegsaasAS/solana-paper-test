@@ -1,0 +1,34 @@
+name: Public chain pool identity check
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cohort_identity.cjs'
+      - 'cost-pool-cohort.json'
+      - '.github/workflows/cohort-identity.yml'
+permissions:
+  contents: read
+jobs:
+  cohort-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce free public runner
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$IS_PRIVATE" = "false"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install exact official versions with lifecycle scripts disabled
+        run: |
+          mkdir quote-check
+          cp stream-quote-package.json quote-check/package.json
+          cp cohort_identity.cjs cost-pool-cohort.json quote-check/
+          cd quote-check
+          npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify audited SDK integrity and calculate public prices only
+        working-directory: quote-check
+        run: |
+          node -e 'const a=require("node:assert/strict");const l=require("./package-lock.json");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].version,"2.1.0");a.equal(l.packages["node_modules/@pump-fun/pump-swap-sdk"].integrity,"sha512-O0ulb5In/pMzxpcWIkzU17N27HQNZhGGof4fhgXZUkRj/vDbrZsDrViNoouhR52bvtfRf61e/bSvEg/h+35ueA==")'
+          node cohort_identity.cjs
